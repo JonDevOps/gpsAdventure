@@ -1,0 +1,2 @@
+screen -d -m -S gpsengineapp ./dev_appserver.py --host 192.168.1.50 --port 8100 --admin_port 7771 ~/gpsengineapp/
+

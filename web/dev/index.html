@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>GPS Adventure Map</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta name="google-signin-scope" content="profile email">
+    <meta name="google-signin-client_id" content="474832205158-5q0sqta9e932cmftub9aaihgeb2c6hko.apps.googleusercontent.com">
+    <script src="https://apis.google.com/js/platform.js" async defer></script>
+    <meta charset="utf-8">
+    <style>
+      html, body, #map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+      }
+    </style>
+	<script src="jquery-1.11.2.min.js"> </script>
+    <script>
+
+	var map;
+	var markers = new Array();
+	var resp;
+	var missions = new Array();
+	var activeMission;
+	var infoWindow;
+	var missionEdit = true;     //Mission "editor" mode vs Waypoint "editor"
+
+function initialize() {
+	var myLatlng = new google.maps.LatLng(40.78,-79.76);
+	var mapOptions = {
+		zoom: 8,
+		center: myLatlng
+	}
+	map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+	google.maps.event.addListener(map, 'click', function(event) {
+		var latlng = event.latLng;
+		var tmp;
+		var marker;
+		var url = "http://gpsadventure-dreamersnet.appspot.com/missionForm"
+		if (missionEdit)    //mission editor
+			marker = addMarker(latlng);
+		else {              //waypoint editor
+			marker = addWaypoint(latlng);
+			url += "?Title=" + activeMission;
+		}
+		resp = $.get(url).always( function (data) {
+			if (data.readyState != 4)
+				setTimeout(injectForm(marker), 4000);
+			else
+				setTimeout(injectForm(marker), 1000);
+		});
+	});
+	getMissions();
+}
+
+function injectForm(marker)
+{
+	var latlng = marker.getPosition();
+	var htmlResp = resp.responseText;
+	infoWindow = new google.maps.InfoWindow({
+		content : htmlResp
+	});
+	google.maps.event.addListener(infoWindow, 'closeclick', function() {
+		marker.setMap(null);
+		markers.pop(marker);
+	});
+	infoWindow.open(map,marker);
+	document.getElementById('MissionLat').setAttribute("value", latlng.lat());
+	document.getElementById('MissionLon').setAttribute("value", latlng.lng());
+}
+
+function makeOpen(mission, j, marker) {
+	return function() {
+		infoWindow.close();
+		infoWindow = mission.infowindows[j];
+		infoWindow.open(map,marker);
+		var activeMissions = marker.title.split(":");
+		activeMission = activeMissions[0]; //initialize activeMission
+		if (activeMissions.length > 2) {   //if the user put a : in the title we need to rebuild it.
+			for (var i=1; i<activeMissions.length-1; i++) {
+				activeMission += activeMissions[i];
+			}
+		}
+	};
+}
+
+function Mission(obj) {
+	this.title = obj.title || "";
+	this.position = [];
+	this.info = [];
+	this.map = map;
+  if (obj.creator) {
+    this.creator = obj.creator.nickname || "";
+  }
+	this.desc = obj.desc || "";
+	this.infowindows = [];
+	var tmp;
+
+
+	for (var prop in obj) {
+		if (obj.hasOwnProperty(prop)) {
+			if (prop == "position") {
+				for (var i=0; i < obj[prop].length; i++) {
+					this[prop][i] = new google.maps.LatLng(obj[prop][i].lat, obj[prop][i].lon);
+					var marker = new google.maps.Marker();
+					marker.setPosition(this.position[i]);
+					marker.setTitle(this.title + ":" + (i+1));
+					marker.setMap(this.map);
+					tmp = "<h3> " + marker.title + "</h3> " + this.desc;
+          tmp += "<br> Creator :" + this.creator;
+					tmp += "<br> <a href='#' onclick='setWaypoint()'> Add Waypoint </a> ";
+					var infowindow =  new google.maps.InfoWindow({
+						content: tmp
+					});
+					this.infowindows[i]=infowindow;
+					google.maps.event.addListener(marker, 'click', makeOpen(this,i,marker));
+					markers.push(marker);
+				}
+			}
+			else
+				this[prop] = obj[prop];
+		}
+	}
+}
+
+Mission.prototype.length = function() {
+	return position.length;
+}
+
+Mission.prototype.setMap = function(newMap) {
+	for (var i=0; i < this.position.length; i++)
+	{
+		var marker = new google.maps.Marker();
+		marker.setPosition(this.position[i]);
+		marker.title = this.title + (i+1);
+		marker.setMap(newMap);
+		markers.push(marker);
+	}
+};
+
+function setMapAll(newMap) {
+	for (var i=0; i<markers.length; i++)
+	{
+		markers[i].setMap(newMap);
+	}
+
+	for (var i=0; i<missions.length; i++)
+	{
+		missions[i].setMap(newMap);
+	}
+}
+
+function getJSON() {
+	setMapAll(null);
+	var str = JSON.stringify(markers);
+	setMapAll(map);
+	return str;
+}
+
+function JSONtoMissions(jsObj) {
+	for (var i=0; i<jsObj.length; i++) {
+		missions.push(new Mission(jsObj[i]));
+	}
+}
+
+function getMissions() {
+	var JSONmissions;
+	resp = $.getJSON("http://gpsadventure-dreamersnet.appspot.com/missions").always( function (data) {
+		if (data.readyState != 4)
+			setTimeout(JSONtoMissions(resp.responseJSON), 4000);
+		else
+			JSONtoMissions(data.responseJSON);
+		});
+}
+
+function addJSON(JSONstr) {
+	var newMarkers = JSON.parse(JSONstr);
+	for (var i=0; i< newMarkers.length; i++)
+	{
+		var nGMMarker = new google.maps.Marker(newMarkers[i]);
+		nGMMarker.setMap(map);
+		markers.push(nGMMarker);
+	}
+}
+
+function addMarker(location) {
+	var marker = new google.maps.Marker({
+		position: location,
+		map: map });
+	markers.push(marker);
+	return marker;
+}
+
+function addWaypoint(location) {
+	var marker = new google.maps.Marker({
+		position:location,
+		map: map,
+		icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'});
+	markers.push(marker);
+	missionEdit = true;
+	return marker;
+}
+
+function setWaypoint() {
+	missionEdit = !missionEdit;
+	infoWindow.close();
+}
+
+function addMarkersJSON(markersJSON) {
+	var newMarkers = JSON.parse(markersJSON);
+	for (var i=0; i< newMarkers.length; i++)
+	{
+		var nGMMarker = new google.maps.Marker(newMarkers[i].position[0]);
+		markers.push(nGMMarker);
+		nGMMarker.setMap(map);
+	}
+}
+
+function loadScript() {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyD3aMz9hP47yugu7kvYq668rv7k-A48YCE&v=3.exp&' +
+      'callback=initialize';
+  document.body.appendChild(script);
+  setTimeout(function() {infoWindow = new google.maps.InfoWindow;}, 1000);
+}
+
+window.onload = loadScript;
+
+    </script>
+  </head>
+  <body>
+    <div class="g-signin2" data-onsuccess="onSignIn" data-theme="dark"></div>
+    <script>
+      function onSignIn(googleUser) {
+        // Useful data for your client-side scripts:
+        var profile = googleUser.getBasicProfile();
+        console.log("ID: " + profile.getId()); // Don't send this directly to your server!
+        console.log("Name: " + profile.getName());
+        console.log("Image URL: " + profile.getImageUrl());
+        console.log("Email: " + profile.getEmail());
+
+        // The ID token you need to pass to your backend:
+        var id_token = googleUser.getAuthResponse().id_token;
+        console.log("ID Token: " + id_token);
+      };
+    </script>
+    <div id="map-canvas"></div>
+  </body>
+</html>

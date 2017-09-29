@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>GPS Adventure Map</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <style>
+      html, body, #map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+      }
+    </style>
+	<script src="jquery-1.11.2.min.js"> </script>
+    <script>
+	
+	var map;
+	var markers = new Array();
+	var resp;
+	var missions = new Array();
+	
+function initialize() {
+  var myLatlng = new google.maps.LatLng(40.78,-79.76);
+  var mapOptions = {
+    zoom: 8,
+    center: myLatlng
+  }
+  map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+
+  getMissions();
+}
+
+function Mission(obj) {
+	this.title = obj.title || "";
+	this.position = [];
+	this.map = map;
+	
+	for (var prop in obj) {
+		if (obj.hasOwnProperty(prop)) {
+			if (prop == "position") {
+				for (var i=0; i < obj[prop].length; i++) {
+					this[prop][i] = new google.maps.LatLng(obj[prop][i].lat, obj[prop][i].lon);
+					var marker = new google.maps.Marker();
+					marker.setPosition(this.position[i]);
+					marker.setTitle(this.title + ":" + (i+1));
+					marker.setMap(this.map);
+					markers.push(marker);
+				}
+			}
+			else
+				this[prop] = obj[prop];
+		}
+	}
+}
+
+Mission.prototype.setMap = function(newMap) {
+	for (var i=0; i < this.position.length; i++)
+	{
+		var marker = new google.maps.Marker();
+		marker.setPosition(this.position[i]);
+		marker.title = this.title + (i+1);
+		marker.setMap(newMap);
+		markers.push(marker);
+	}
+};
+
+
+//a function to test from console
+function makeMore() {
+	var marker3 = new google.maps.Marker({
+      position: new google.maps.LatLng(50,-79),
+      map: map,
+      title: 'Mission ABSD!'
+  });
+  markers.push(marker3);
+  var marker2 = new google.maps.Marker({
+      position: new google.maps.LatLng(40,-79),
+      map: map,
+      title: 'Making more!'
+  });
+  markers.push(marker2);
+}
+
+function setMapAll(newMap) { 
+	for (var i=0; i<markers.length; i++)
+	{
+		markers[i].setMap(newMap);
+	}
+	
+	for (var i=0; i<missions.length; i++)
+	{
+		missions[i].setMap(newMap);
+	}
+}
+
+function getJSON() {
+	setMapAll(null);
+	var str = JSON.stringify(markers);
+	setMapAll(map);
+	return str;
+}
+
+function JSONtoMissions(jsObj) {
+	for (var i=0; i<jsObj.length; i++) { 
+		missions.push(new Mission(jsObj[i]));
+	}
+}
+
+function getMissions() {
+	var JSONmissions;
+	resp = $.getJSON("http://home.dreamersnet.net:8100/missions").always( function (data) {
+		if (data.readyState != 4)
+			setTimeout(JSONtoMissions(resp.responseJSON), 4000);
+		else
+			JSONtoMissions(data.responseJSON);
+		});
+}
+
+function addJSON(JSONstr) {
+	var newMarkers = JSON.parse(JSONstr);
+	for (var i=0; i< newMarkers.length; i++)
+	{
+		var nGMMarker = new google.maps.Marker(newMarkers[i]);
+		nGMMarker.setMap(map);
+		markers.push(nGMMarker);
+	}
+}
+
+function addMarkersJSON(markersJSON) {
+	var newMarkers = JSON.parse(markersJSON);	
+	for (var i=0; i< newMarkers.length; i++)
+	{
+		var nGMMarker = new google.maps.Marker(newMarkers[i].position[0]);
+		markers.push(nGMMarker);
+		nGMMarker.setMap(map);
+	}
+}
+
+function loadScript() {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyD3aMz9hP47yugu7kvYq668rv7k-A48YCE&v=3.exp&' +
+      'callback=initialize';
+  document.body.appendChild(script);
+}
+
+window.onload = loadScript;
+
+    </script>
+  </head>
+  <body>
+    <div id="map-canvas"></div>
+  </body>
+</html>
